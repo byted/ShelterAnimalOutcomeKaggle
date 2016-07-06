@@ -17,11 +17,14 @@ def get_data():
     test_df['Intact'] = test_df['Intact'].replace('Unknown', np.nan)
     test_df['Intact'] = test_df['Intact'].replace('Spayed', 'Neutered')
 
-    train_df['NameShort'] = train_df['Name']
-    test_df['NameShort'] = test_df['Name']
+    train_df['FirstLetter'] = train_df['Name'].str[0]
+    test_df['FirstLetter'] = test_df['Name'].str[0]
 
-    # train_df['ID'] = train_df['AnimalID']
-    # train_df.drop('AnimalID', axis=1, inplace=True)
+    train_df.Color = train_df.Color.apply(lambda x: x.split("/")[0])
+    test_df.Color = test_df.Color.apply(lambda x: x.split("/")[0])
+
+    train_df.Breed = train_df.Breed.apply(lambda x: x.split("/")[0])
+    test_df.Breed = test_df.Breed.apply(lambda x: x.split("/")[0])
 
     def calc_age_in_days(df):
         factor = {'year': 365, 'month': 31, 'week': 7, 'day': 1}

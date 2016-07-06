@@ -6,6 +6,7 @@ from sklearn.cross_validation import StratifiedKFold
 from sklearn.naive_bayes import BernoulliNB
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.lda import LDA
 from sklearn.metrics import log_loss
 import xgboost as xgb
@@ -49,32 +50,45 @@ os.makedirs(foldername)
 params = {
     'XGB': {
         'objective': 'multi:softprob',
-        'learning_rate': 0.35,     # feature weight shrinkrage: lower -> reduce complexity
-        'gamma': 0.00,   # loss reduction needed to split a leaf and add another layer: higher -> reduces complexity
-        'max_depth': 8,  # maximum depth of a tree: higher -> increase complexity
-        # 'min_child_weight': 12,  # minimum number of instances in a leaf: higher -> less complexity
+        'learning_rate': 0.45,     # feature weight shrinkrage: lower -> reduce complexity
+        'gamma': 0.05,   # loss reduction needed to split a leaf and add another layer: higher -> reduces complexity
+        'max_depth': 2,  # maximum depth of a tree: higher -> increase complexity
+        # 'min_child_weight': 6,  # minimum number of instances in a leaf: higher -> less complexity
         'max_delta_step': 1,    # in logregression a higher value might help with imbalanced classes
-        'subsample': 0.5,       # randomly select instances from train set to build trees: lower -> less overfitting
+        'subsample': 1,       # randomly select instances from train set to build trees: lower -> less overfitting
         'colsample_bytree': 0.5,  # subsample colums: lower -> less overfitting
         'scale_pos_weight': 0,  # fight unbalanced classes: sum(negative cases) / sum(positive cases)
         'n_estimators': 2000
     },
-    'BNB': {'binarize': False, 'fit_prior': True, 'alpha': 0.7},
-    'LogReg': {'C': 0.9, 'penalty': 'l1', 'fit_intercept': True, 'tol': 0.000001},
-    'LDA': {}
+    'BNB': {'binarize': False, 'fit_prior': True, 'alpha': 0.4},
+    'LogReg': {'C': 0.7, 'penalty': 'l1', 'fit_intercept': True, 'tol': 0.0001},
+    'LDA': {},
+    'RF': {
+        'n_estimators': 2000,
+        'min_samples_split': 10,
+        # 'min_samples_leaf': 10,
+        'max_depth': 10,
+        'min_weight_fraction_leaf': 0,
+        'max_leaf_nodes': None,
+        'oob_score': False,
+        'criterion': 'entropy',
+        'n_jobs': -1
+    }
 }
 features = {
-    'LogReg': ['AnimalType', 'Sex', 'Intact', 'Breed', 'AgeuponOutcomeInDays'],
-    'BNB': ['AnimalType', 'Sex', 'Intact', 'Breed', 'AgeuponOutcomeInYears'],
-    'XGB': ['AnimalType', 'Sex', 'SexuponOutcome', 'AgeuponOutcomeInDays'],
-    'LDA': ['AnimalType', 'Sex', 'Intact', 'Breed', 'AgeuponOutcomeInDays']
+    'LogReg': ['AnimalType', 'Sex', 'Intact', 'Color', 'Breed', 'AgeuponOutcomeInDays', 'FirstLetter'],
+    'BNB': ['AnimalType', 'Sex', 'Intact', 'Color', 'Breed', 'AgeuponOutcomeInDays', 'FirstLetter'],
+    'XGB': ['AnimalType', 'Sex', 'Intact', 'Color', 'Breed', 'AgeuponOutcomeInDays', 'FirstLetter'],
+    'LDA': ['AnimalType', 'Sex', 'Intact', 'Color', 'Breed', 'AgeuponOutcomeInDays', 'FirstLetter'],
+    'RF': ['AnimalType', 'Sex', 'Intact', 'Color', 'Breed', 'AgeuponOutcomeInDays', 'FirstLetter']
 }
 
 clfs = [
     ('LogReg', OneVsRestClassifier(LogisticRegression(**params['LogReg'])), features['LogReg']),
-    ('BNB', BernoulliNB(**params['BNB']), features['BNB']),
+    # ('BNB', BernoulliNB(**params['BNB']), features['BNB']),
     ('XGB', xgb.XGBClassifier(**params['XGB']), features['XGB']),
-    ('LDA', LDA(**params['LDA']), features['LDA'])
+    ('LDA', LDA(**params['LDA']), features['LDA']),
+    ('RF', RandomForestClassifier(**params['RF']), features['RF'])
 ]
 
 test_X, y, submission_X, test_df, train_df, le = data.get_data()
@@ -92,7 +106,7 @@ for j, (name, clf, X, X_submission) in enumerate(clfs):
         X_train, y_train = X[train], y[train]
         X_test, y_test = X[test], y[test]
         if name == 'XGB':
-            fit_param = {'eval_metric': 'mlogloss', 'eval_set': [(X_test, y_test)], 'early_stopping_rounds': 50}
+            fit_param = {'eval_metric': 'mlogloss', 'eval_set': [(X_test, y_test)], 'early_stopping_rounds': 200}
             clf = _silent_fit(clf, X_train, y_train, fit_param)
         else:
             clf.fit(X_train, y_train)
@@ -108,6 +122,7 @@ for j, (name, clf, X, X_submission) in enumerate(clfs):
     to_kaggle('{0}/{0}_{1}.csv'.format(foldername, name), preds, test_df, train_df, le)
     print('-------------')
 
+print([(n, a) for n, _, a in stats_per_clf])
 # reuse old script instead of rewriting without filesystem access
 dfs = [pd.read_csv('{0}/{0}_{1}.csv'.format(foldername, fn)) for fn, _, _ in stats_per_clf]
 grouped_df = pd.concat(dfs).groupby('ID')
