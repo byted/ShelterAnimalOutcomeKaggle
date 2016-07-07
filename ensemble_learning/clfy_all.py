@@ -38,6 +38,13 @@ def _silent_fit(clf, X, y, fit_param):
         sys.stderr = old_stderr
     return clf
 
+
+def one_vs_all_wrapper(clf):
+    return lambda **params: OneVsRestClassifier(clf(**params))
+
+####
+# COMMANDLINE ARGS
+####
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_folds', '-n', help='Number of folds',
                     default=3, type=int)
@@ -47,6 +54,19 @@ args = parser.parse_args()
 
 foldername = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 os.makedirs(foldername)
+
+####
+# CONFIG
+####
+# Define the algorithms to use (sklearn API) and give 'em a name
+clfs = [
+    ('LogReg', one_vs_all_wrapper(LogisticRegression)),
+    # ('BNB', BernoulliNB),
+    ('XGB', xgb.XGBClassifier),
+    ('LDA', LDA),
+    ('RF', RandomForestClassifier)
+]
+# Set the parameters for each classifier. Identified by your custom name
 params = {
     'XGB': {
         'objective': 'multi:softprob',
@@ -75,6 +95,7 @@ params = {
         'n_jobs': -1
     }
 }
+# Define on which features each classifier should operate. Depends on data.py!
 features = {
     'LogReg': ['AnimalType', 'Sex', 'Intact', 'Color', 'Breed', 'AgeuponOutcomeInDays', 'FirstLetter'],
     'BNB': ['AnimalType', 'Sex', 'Intact', 'Color', 'Breed', 'AgeuponOutcomeInDays', 'FirstLetter'],
@@ -83,16 +104,14 @@ features = {
     'RF': ['AnimalType', 'Sex', 'Intact', 'Color', 'Breed', 'AgeuponOutcomeInDays', 'FirstLetter']
 }
 
-clfs = [
-    ('LogReg', OneVsRestClassifier(LogisticRegression(**params['LogReg'])), features['LogReg']),
-    # ('BNB', BernoulliNB(**params['BNB']), features['BNB']),
-    ('XGB', xgb.XGBClassifier(**params['XGB']), features['XGB']),
-    ('LDA', LDA(**params['LDA']), features['LDA']),
-    ('RF', RandomForestClassifier(**params['RF']), features['RF'])
-]
+####
+# CODE
+####
 
+# import the engineered data
 test_X, y, submission_X, test_df, train_df, le = data.get_data()
-clfs = [(n, c, _filter_features(test_X, f), _filter_features(submission_X, f)) for n, c, f in clfs]
+# bootstrap classifiers from config
+clfs = [(n, c(**params[n]), _filter_features(test_X, features[n]), _filter_features(submission_X, features[n])) for n, c in clfs]
 skf = list(StratifiedKFold(y, args.n_folds, shuffle=True, random_state=args.random_state))
 
 stats_per_clf = []
